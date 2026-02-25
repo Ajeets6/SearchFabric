@@ -1,0 +1,8 @@
+pyside6
+sentence-transformers
+numpy
+sqlite-utils
+python-docx
+pdfplumber
+pytesseract
+Pillow
