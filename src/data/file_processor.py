@@ -1,14 +1,33 @@
-from pathlib import Path
+"""
+File Processing Utilities
+"""
+
+import base64
+
+# File size limit in MB
+MAX_FILE_SIZE_MB = 20
+
+# Supported file extensions
+SUPPORTED_TEXT = {".txt", ".md", ".py", ".js", ".ts", ".html", ".css",
+                  ".json", ".csv", ".xml", ".yaml", ".yml", ".toml", ".rst", ".log"}
+SUPPORTED_IMAGE = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
+SUPPORTED_PDF = {".pdf"}
+
+
 class FileProcessor:
+    """Utility class for processing different file types."""
+
     @staticmethod
-    def load_text(path: Path) -> str:
+    def load_text(path):
+        """Load text content from a file."""
         try:
             return path.read_text(errors="replace")[:8000]
         except Exception as e:
             return f"[Error reading file: {e}]"
 
     @staticmethod
-    def load_image_b64(path: Path) -> str | None:
+    def load_image_b64(path):
+        """Load image as base64 encoded string."""
         try:
             with open(path, "rb") as f:
                 return base64.b64encode(f.read()).decode()
@@ -16,7 +35,8 @@ class FileProcessor:
             return None
 
     @staticmethod
-    def load_pdf_text(path: Path) -> str:
+    def load_pdf_text(path):
+        """Extract text from PDF file."""
         try:
             import pdfplumber
             with pdfplumber.open(path) as pdf:
@@ -35,13 +55,21 @@ class FileProcessor:
                     )
                 return text[:8000] or "[No text extracted from PDF]"
             except ImportError:
-                return "[PDF support requires: pip install pdfplumber or PyPDF2]"
+                return "[PDF support: pip install pdfplumber]"
         except Exception as e:
             return f"[Error reading PDF: {e}]"
 
     @classmethod
-    def process(cls, path: Path):
-        """Returns (content_type, content, images_b64)"""
+    def process(cls, path):
+        """
+        Process a file and return its content.
+
+        Args:
+            path: Path object to the file
+
+        Returns:
+            Tuple of (file_type, content, images_list)
+        """
         suffix = path.suffix.lower()
         if suffix in SUPPORTED_TEXT:
             return ("text", cls.load_text(path), None)
@@ -50,5 +78,4 @@ class FileProcessor:
             return ("image", f"[Image: {path.name}]", [b64] if b64 else None)
         elif suffix in SUPPORTED_PDF:
             return ("pdf", cls.load_pdf_text(path), None)
-        else:
-            return ("unknown", None, None)
+        return ("unknown", None, None)
