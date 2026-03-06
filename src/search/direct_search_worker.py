@@ -89,8 +89,8 @@ class DirectSearchWorker(QThread):
         # Normalize score
         if total_matches > 0:
             score = min(score, 1.0)
-        else:
-            return f"No matches found for '{self.query}'\n\nFile preview:\n{content[:300]}...", 0.0
+        #else:
+        #    return f"No matches found for '{self.query}'\n\nFile preview:\n{content[:300]}...", 0.0
 
         # Extract relevant snippets
         snippets = self._extract_matching_snippets(content, query_words)
