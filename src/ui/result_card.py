@@ -1,7 +1,3 @@
-"""
-Result Card Widget
-"""
-
 from PyQt5.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
@@ -52,11 +48,11 @@ class ResultCard(QFrame):
         icon_lbl.setFont(QFont("Segoe UI Emoji", 14))
 
         fname_lbl = QLabel(self.filename)
-        fname_lbl.setFont(QFont("Courier New", 10, QFont.Bold))
+        fname_lbl.setFont(QFont("Consolas, Courier New, monospace", 10, QFont.Bold))
         fname_lbl.setStyleSheet(f"color: {type_colors.get(self.file_type, DARK['accent'])};")
 
         badge = QLabel(self.file_type.upper())
-        badge.setFont(QFont("Courier New", 8))
+        badge.setFont(QFont("Consolas, Courier New, monospace", 8))
         badge.setStyleSheet(f"""
             color: {DARK['bg']};
             background: {type_colors.get(self.file_type, DARK['accent'])};
@@ -81,7 +77,7 @@ class ResultCard(QFrame):
 
         self.content_label = QLabel("")
         self.content_label.setWordWrap(True)
-        self.content_label.setFont(QFont("Georgia", 10))
+        self.content_label.setFont(QFont("Segoe UI, Arial, sans-serif", 10))
         self.content_label.setStyleSheet(f"color: {DARK['text']};")
         self.content_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         layout.addWidget(self.content_label)

@@ -1,7 +1,3 @@
-"""
-Enhanced Result Card with Fast Results and LLM Analysis
-"""
-
 from PyQt5.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QFont
@@ -57,12 +53,12 @@ class EnhancedResultCard(QFrame):
         icon_lbl.setFont(QFont("Segoe UI Emoji", 14))
 
         fname_lbl = QLabel(self.filename)
-        fname_lbl.setFont(QFont("Courier New", 10, QFont.Bold))
+        fname_lbl.setFont(QFont("Consolas, Courier New, monospace", 10, QFont.Bold))
         fname_lbl.setStyleSheet(f"color: {type_colors.get(self.file_type, DARK['accent'])};")
 
         # Score badge
         score_badge = QLabel(f"{self.score:.2f}")
-        score_badge.setFont(QFont("Courier New", 8))
+        score_badge.setFont(QFont("Consolas, Courier New, monospace", 8))
         score_color = DARK["success"] if self.score > 0.7 else (DARK["warning"] if self.score > 0.4 else DARK["text_dim"])
         score_badge.setStyleSheet(f"""
             color: {DARK['bg']};
@@ -73,7 +69,7 @@ class EnhancedResultCard(QFrame):
 
         # Type badge
         badge = QLabel(self.file_type.upper())
-        badge.setFont(QFont("Courier New", 8))
+        badge.setFont(QFont("Consolas, Courier New, monospace", 8))
         badge.setStyleSheet(f"""
             color: {DARK['bg']};
             background: {type_colors.get(self.file_type, DARK['accent'])};
@@ -100,7 +96,7 @@ class EnhancedResultCard(QFrame):
         # Fast content area
         self.fast_content_label = QLabel("")
         self.fast_content_label.setWordWrap(True)
-        self.fast_content_label.setFont(QFont("Georgia", 10))
+        self.fast_content_label.setFont(QFont("Segoe UI, Arial, sans-serif", 10))
         self.fast_content_label.setStyleSheet(f"color: {DARK['text_dim']};")
         self.fast_content_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         layout.addWidget(self.fast_content_label)
@@ -108,7 +104,7 @@ class EnhancedResultCard(QFrame):
         # LLM analysis area (initially hidden)
         self.llm_content_label = QLabel("")
         self.llm_content_label.setWordWrap(True)
-        self.llm_content_label.setFont(QFont("Georgia", 10))
+        self.llm_content_label.setFont(QFont("Segoe UI, Arial, sans-serif", 10))
         self.llm_content_label.setStyleSheet(f"color: {DARK['text']}; margin-top: 8px;")
         self.llm_content_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.llm_content_label.hide()
@@ -117,7 +113,7 @@ class EnhancedResultCard(QFrame):
         # Analyze button (for high-score results without LLM analysis)
         self.analyze_btn = QPushButton("🔍 Analyze with AI")
         self.analyze_btn.setFixedHeight(28)
-        self.analyze_btn.setFont(QFont("Courier New", 8))
+        self.analyze_btn.setFont(QFont("Consolas, Courier New, monospace", 8))
         self.analyze_btn.clicked.connect(self._request_llm_analysis)
         self.analyze_btn.setStyleSheet(f"""
             QPushButton {{

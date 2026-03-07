@@ -1,7 +1,3 @@
-"""
-Main Application Window
-"""
-
 from pathlib import Path
 
 from PyQt5.QtWidgets import (
@@ -47,7 +43,7 @@ class MultimodalSearchApp(QMainWindow):
         self._check_ollama()
 
     def _setup_window(self):
-        self.setWindowTitle("⚡ Multimodal Search — Ollama")
+        self.setWindowTitle("SearchFabric - Multimodal Search")
         self.setMinimumSize(1000, 700)
         self.resize(1200, 800)
 
@@ -90,14 +86,14 @@ class MultimodalSearchApp(QMainWindow):
         layout.setContentsMargins(24, 0, 24, 0)
 
         title = QLabel("⚡ MULTIMODAL SEARCH")
-        title.setFont(QFont("Courier New", 14, QFont.Bold))
+        title.setFont(QFont("Consolas, Courier New, monospace", 14, QFont.Bold))
         title.setStyleSheet(f"color: {DARK['accent']}; letter-spacing: 2px;")
 
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Type to search across all files...")
         self.search_input.setFixedHeight(42)
         self.search_input.setMinimumWidth(400)
-        self.search_input.setFont(QFont("Georgia", 13))
+        self.search_input.setFont(QFont("Segoe UI, Arial, sans-serif", 13))
         self.search_input.textChanged.connect(self._on_search_changed)
 
         model_label = QLabel("Model:")
@@ -109,14 +105,14 @@ class MultimodalSearchApp(QMainWindow):
         refresh_btn = QToolButton()
         refresh_btn.setText("↻")
         refresh_btn.setFixedSize(36, 36)
-        refresh_btn.setFont(QFont("Arial", 14))
+        refresh_btn.setFont(QFont("Segoe UI, Arial, sans-serif", 14))
         refresh_btn.clicked.connect(self._refresh_models)
         refresh_btn.setToolTip("Refresh model list")
 
         # Search mode toggle
         self.mode_toggle = QPushButton("⚡ Direct Search")
         self.mode_toggle.setFixedHeight(36)
-        self.mode_toggle.setFont(QFont("Courier New", 9))
+        self.mode_toggle.setFont(QFont("Consolas, Courier New, monospace", 9))
         self.mode_toggle.clicked.connect(self._toggle_search_mode)
         self.mode_toggle.setStyleSheet(f"""
             QPushButton {{
@@ -150,7 +146,7 @@ class MultimodalSearchApp(QMainWindow):
         layout.setSpacing(10)
 
         lbl = QLabel("📁  FILES")
-        lbl.setFont(QFont("Courier New", 10, QFont.Bold))
+        lbl.setFont(QFont("Consolas, Courier New, monospace", 10, QFont.Bold))
         lbl.setStyleSheet(f"color: {DARK['text_dim']}; letter-spacing: 2px;")
         layout.addWidget(lbl)
 
@@ -159,7 +155,7 @@ class MultimodalSearchApp(QMainWindow):
         self.add_folder_btn = QPushButton("+ Add Folder")
         for btn in (self.add_files_btn, self.add_folder_btn):
             btn.setFixedHeight(32)
-            btn.setFont(QFont("Courier New", 9))
+            btn.setFont(QFont("Consolas, Courier New, monospace", 9))
         self.add_files_btn.clicked.connect(self._add_files)
         self.add_folder_btn.clicked.connect(self._add_folder)
         btn_row.addWidget(self.add_files_btn)
@@ -167,7 +163,7 @@ class MultimodalSearchApp(QMainWindow):
         layout.addLayout(btn_row)
 
         filter_group = QGroupBox("File Types")
-        filter_group.setFont(QFont("Courier New", 9))
+        filter_group.setFont(QFont("Consolas, Courier New, monospace", 9))
         fg_layout = QVBoxLayout(filter_group)
         fg_layout.setSpacing(4)
         self.cb_text = QCheckBox("📄 Text / Code")
@@ -175,13 +171,13 @@ class MultimodalSearchApp(QMainWindow):
         self.cb_pdf = QCheckBox("📕 PDFs")
         for cb in (self.cb_text, self.cb_image, self.cb_pdf):
             cb.setChecked(True)
-            cb.setFont(QFont("Segoe UI", 10))
+            cb.setFont(QFont("Segoe UI, Arial, sans-serif", 10))
             fg_layout.addWidget(cb)
         layout.addWidget(filter_group)
 
         max_row = QHBoxLayout()
         max_lbl = QLabel("Max files per search:")
-        max_lbl.setFont(QFont("Segoe UI", 9))
+        max_lbl.setFont(QFont("Segoe UI, Arial, sans-serif", 9))
         max_lbl.setStyleSheet(f"color: {DARK['text_dim']};")
         self.max_files_spin = QSpinBox()
         self.max_files_spin.setRange(1, 100)
@@ -193,7 +189,7 @@ class MultimodalSearchApp(QMainWindow):
         layout.addLayout(max_row)
 
         self.file_list = QListWidget()
-        self.file_list.setFont(QFont("Courier New", 9))
+        self.file_list.setFont(QFont("Consolas, Courier New, monospace", 9))
         self.file_list.setSpacing(2)
         layout.addWidget(self.file_list, 1)
 
@@ -202,7 +198,7 @@ class MultimodalSearchApp(QMainWindow):
         self.file_count_label.setStyleSheet(f"color: {DARK['text_dim']}; font-size: 10px;")
         clear_btn = QPushButton("Clear All")
         clear_btn.setFixedHeight(26)
-        clear_btn.setFont(QFont("Courier New", 8))
+        clear_btn.setFont(QFont("Consolas, Courier New, monospace", 8))
         clear_btn.clicked.connect(self._clear_files)
         bottom_row.addWidget(self.file_count_label)
         bottom_row.addStretch()
@@ -219,7 +215,7 @@ class MultimodalSearchApp(QMainWindow):
 
         results_header = QHBoxLayout()
         self.results_title = QLabel("RESULTS")
-        self.results_title.setFont(QFont("Courier New", 10, QFont.Bold))
+        self.results_title.setFont(QFont("Consolas, Courier New, monospace", 10, QFont.Bold))
         self.results_title.setStyleSheet(f"color: {DARK['text_dim']}; letter-spacing: 2px;")
 
         self.progress_bar = QProgressBar()
@@ -229,13 +225,13 @@ class MultimodalSearchApp(QMainWindow):
 
         self.stop_btn = QPushButton("■ Stop")
         self.stop_btn.setFixedHeight(28)
-        self.stop_btn.setFont(QFont("Courier New", 9))
+        self.stop_btn.setFont(QFont("Consolas, Courier New, monospace", 9))
         self.stop_btn.setVisible(False)
         self.stop_btn.clicked.connect(self._stop_search)
 
         self.clear_results_btn = QPushButton("Clear Results")
         self.clear_results_btn.setFixedHeight(28)
-        self.clear_results_btn.setFont(QFont("Courier New", 9))
+        self.clear_results_btn.setFont(QFont("Consolas, Courier New, monospace", 9))
         self.clear_results_btn.clicked.connect(self._clear_results)
 
         results_header.addWidget(self.results_title)
@@ -259,7 +255,7 @@ class MultimodalSearchApp(QMainWindow):
             "🔍  Start typing in the search bar\nto see direct content matches"
         )
         self.placeholder.setAlignment(Qt.AlignCenter)
-        self.placeholder.setFont(QFont("Georgia", 13))
+        self.placeholder.setFont(QFont("Segoe UI, Arial, sans-serif", 13))
         self.placeholder.setStyleSheet(f"color: {DARK['text_dim']};")
         self.results_layout.addWidget(self.placeholder)
         self.results_layout.addStretch()

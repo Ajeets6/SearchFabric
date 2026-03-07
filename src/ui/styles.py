@@ -1,7 +1,3 @@
-"""
-UI Styles and Theme Constants
-"""
-
 # Dark theme colors
 DARK = {
     "bg":        "#0D0F14",
@@ -23,7 +19,7 @@ def get_main_stylesheet():
     """Returns the main application stylesheet."""
     return f"""
         QMainWindow, QWidget {{
-            background: {DARK['bg']};
+            background: {DARK['surface']};
             color: {DARK['text']};
         }}
         QWidget#Header {{
@@ -34,7 +30,7 @@ def get_main_stylesheet():
             background: {DARK['surface']};
             border-right: 1px solid {DARK['border']};
         }}
-        QWidget#RightPanel {{ background: {DARK['bg']}; }}
+        QWidget#RightPanel {{ background: {DARK['surface']}; }}
         QLineEdit {{
             background: {DARK['surface2']};
             border: 1.5px solid {DARK['border']};
@@ -61,7 +57,7 @@ def get_main_stylesheet():
             border-radius: 6px;
             color: {DARK['text']};
             padding: 0 10px;
-            font-family: 'Courier New';
+            font-family: 'Consolas', 'Courier New', monospace;
             font-size: 11px;
         }}
         QComboBox QAbstractItemView {{

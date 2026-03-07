@@ -1,7 +1,3 @@
-"""
-Direct Result Card - Shows actual content without LLM analysis
-"""
-
 from PyQt5.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QFont
