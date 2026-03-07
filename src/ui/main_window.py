@@ -1,13 +1,13 @@
 from pathlib import Path
 
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLineEdit, QPushButton, QLabel, QScrollArea, QFrame, QFileDialog,
     QProgressBar, QSplitter, QListWidget, QListWidgetItem,
     QComboBox, QCheckBox, QSpinBox, QGroupBox, QToolButton, QStatusBar
 )
-from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QFont
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QFont
 
 from ui.styles import DARK, get_main_stylesheet
 from ui.result_card import ResultCard

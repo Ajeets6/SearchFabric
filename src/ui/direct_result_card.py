@@ -1,13 +1,13 @@
-from PyQt5.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
-from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QFont
+from PySide6.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QFont
 
 from ui.styles import DARK
 
 class DirectResultCard(QFrame):
     """Widget displaying direct search results without LLM processing."""
 
-    analyze_requested = pyqtSignal(str, str, str)  # (result_id, filename, file_type)
+    analyze_requested = Signal(str, str, str)  # (result_id, filename, file_type)
 
     def __init__(self, result_id, filename, file_type, content, score=0.0, parent=None):
         super().__init__(parent)
@@ -162,7 +162,7 @@ class DirectResultCard(QFrame):
 
     def _copy_content(self):
         """Copy content to clipboard."""
-        from PyQt5.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication
         clipboard = QApplication.clipboard()
         clipboard.setText(self.content)
 
@@ -171,7 +171,7 @@ class DirectResultCard(QFrame):
         self.copy_btn.setText("✅ Copied!")
 
         # Reset button text after 2 seconds
-        from PyQt5.QtCore import QTimer
+        from PySide6.QtCore import QTimer
         QTimer.singleShot(2000, lambda: self.copy_btn.setText(original_text))
 
     def mark_done(self):

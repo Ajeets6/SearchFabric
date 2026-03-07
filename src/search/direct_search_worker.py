@@ -2,7 +2,7 @@
 Direct Search Worker - Shows actual content matches without LLM analysis
 """
 
-from PyQt5.QtCore import QThread, pyqtSignal
+from PySide6.QtCore import QThread, Signal
 import re
 from pathlib import Path
 
@@ -12,11 +12,11 @@ from data.file_processor import FileProcessor
 class DirectSearchWorker(QThread):
     """Background worker thread that shows direct content matches."""
 
-    result_found = pyqtSignal(str, str, str, str, float)  # (result_id, filename, file_type, content, score)
-    result_started = pyqtSignal(str, str, str)  # (result_id, filename, file_type)
-    result_done = pyqtSignal(str)
-    error_occurred = pyqtSignal(str, str)
-    all_done = pyqtSignal()
+    result_found = Signal(str, str, str, str, float)  # (result_id, filename, file_type, content, score)
+    result_started = Signal(str, str, str)  # (result_id, filename, file_type)
+    result_done = Signal(str)
+    error_occurred = Signal(str, str)
+    all_done = Signal()
 
     def __init__(self, query, files, model=None, ollama_client=None):
         super().__init__()

@@ -1,13 +1,13 @@
-from PyQt5.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
-from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QFont
+from PySide6.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QFont
 
 from ui.styles import DARK
 
 class EnhancedResultCard(QFrame):
     """Widget displaying fast results with optional LLM enhancement."""
 
-    llm_analysis_requested = pyqtSignal(str)  # Request LLM analysis for this result
+    llm_analysis_requested = Signal(str)  # Request LLM analysis for this result
 
     def __init__(self, result_id, filename, file_type, score=0.0, parent=None):
         super().__init__(parent)

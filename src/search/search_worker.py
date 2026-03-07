@@ -2,7 +2,7 @@
 Search Worker Thread
 """
 
-from PyQt5.QtCore import QThread, pyqtSignal
+from PySide6.QtCore import QThread, Signal
 
 from data.file_processor import FileProcessor
 
@@ -10,11 +10,11 @@ from data.file_processor import FileProcessor
 class SearchWorker(QThread):
     """Background worker thread for processing search queries."""
 
-    token_received = pyqtSignal(str, str)       # (result_id, token)
-    result_started = pyqtSignal(str, str, str)  # (result_id, filename, file_type)
-    result_done = pyqtSignal(str)
-    error_occurred = pyqtSignal(str, str)
-    all_done = pyqtSignal()
+    token_received = Signal(str, str)       # (result_id, token)
+    result_started = Signal(str, str, str)  # (result_id, filename, file_type)
+    result_done = Signal(str)
+    error_occurred = Signal(str, str)
+    all_done = Signal()
 
     def __init__(self, query, files, model, ollama_client):
         super().__init__()

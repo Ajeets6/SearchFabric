@@ -1,13 +1,13 @@
 """
 Multimodal Search GUI - Powered by Ollama
-PyQt5 version (more Windows-compatible)
+PySide6 version (modern Qt with better tooling)
 Supports: text files, images, PDFs | Live search-as-you-type | Streaming results
 """
 
 import sys
 
-from PyQt5.QtWidgets import QApplication
-from PyQt5.QtGui import QColor, QPalette
+from PySide6.QtWidgets import QApplication
+from PySide6.QtGui import QColor, QPalette
 
 from ui.styles import DARK
 from ui.main_window import MultimodalSearchApp
@@ -33,7 +33,7 @@ def main():
 
     window = MultimodalSearchApp()
     window.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":

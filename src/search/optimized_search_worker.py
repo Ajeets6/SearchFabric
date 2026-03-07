@@ -2,7 +2,7 @@
 Optimized Search Worker with Hybrid Search
 """
 
-from PyQt5.QtCore import QThread, pyqtSignal
+from PySide6.QtCore import QThread, Signal
 from pathlib import Path
 from typing import List, Set, Optional
 import time
@@ -14,13 +14,13 @@ class OptimizedSearchWorker(QThread):
     """Background worker thread for hybrid search processing."""
 
     # Signals for fast results and LLM analysis
-    fast_result_ready = pyqtSignal(str, str, str, float, str)  # (result_id, filename, file_type, score, snippet)
-    llm_token_received = pyqtSignal(str, str)  # (result_id, token) - for LLM analysis
-    result_started = pyqtSignal(str, str, str)  # (result_id, filename, file_type)
-    result_done = pyqtSignal(str)
-    error_occurred = pyqtSignal(str, str)
-    all_done = pyqtSignal()
-    indexing_progress = pyqtSignal(int, int)  # (total, completed)
+    fast_result_ready = Signal(str, str, str, float, str)  # (result_id, filename, file_type, score, snippet)
+    llm_token_received = Signal(str, str)  # (result_id, token) - for LLM analysis
+    result_started = Signal(str, str, str)  # (result_id, filename, file_type)
+    result_done = Signal(str)
+    error_occurred = Signal(str, str)
+    all_done = Signal()
+    indexing_progress = Signal(int, int)  # (total, completed)
 
     def __init__(self, query: str, files: List[Path], model: str, ollama_client,
                  search_mode: SearchMode = SearchMode.HYBRID):

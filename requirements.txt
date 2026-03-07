@@ -1,4 +1,4 @@
-pyside6
+pyside6>=6.4.0
 sentence-transformers
 numpy
 sqlite-utils
@@ -6,7 +6,6 @@ python-docx
 pdfplumber
 pytesseract
 Pillow
-PyQt6>=6.4.0
 requests>=2.28.0
 pdfplumber>=0.9.0
 chromadb>=0.4.0
