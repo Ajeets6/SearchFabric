@@ -6,27 +6,113 @@ from PySide6.QtWidgets import (
     QProgressBar, QSplitter, QListWidget, QListWidgetItem,
     QComboBox, QCheckBox, QSpinBox, QGroupBox, QToolButton, QStatusBar
 )
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QThread, Signal
 from PySide6.QtGui import QFont
 
 from ui.styles import DARK, get_main_stylesheet
-from ui.result_card import ResultCard
-from ui.direct_result_card import DirectResultCard
-from models.ollama_client import OllamaClient
-from search.search_worker import SearchWorker
-from search.direct_search_worker import DirectSearchWorker
+from ui.enhanced_result_card import EnhancedResultCard
+from search.hybrid_search import HybridSearchEngine, SearchResult, SearchMode
 from data.file_processor import SUPPORTED_TEXT, SUPPORTED_IMAGE, SUPPORTED_PDF, MAX_FILE_SIZE_MB
 
 # Debounce delay in milliseconds
 DEBOUNCE_MS = 400
 
 
+class IndexingWorker(QThread):
+    """Background worker for file indexing."""
+    progress_update = Signal(int, int)  # completed, total
+    indexing_finished = Signal(dict)  # stats dict
+    error_occurred = Signal(str)
+
+    def __init__(self, search_engine, files):
+        super().__init__()
+        self.search_engine = search_engine
+        self.files = files
+
+    def run(self):
+        try:
+            def progress_callback(total, completed):
+                self.progress_update.emit(completed, total)
+
+            stats = self.search_engine.index_files(self.files, progress_callback)
+            self.indexing_finished.emit(stats)
+        except Exception as e:
+            self.error_occurred.emit(str(e))
+
+
+class HybridSearchWorker(QThread):
+    """Worker thread for hybrid search operations."""
+    search_completed = Signal(list)  # List[SearchResult]
+    progress_update = Signal(int, int)  # current, total
+
+    def __init__(self, search_engine, query, files, max_files):
+        super().__init__()
+        self.search_engine = search_engine
+        self.query = query
+        self.files = files[:max_files]  # Limit files
+        self._stop = False
+
+    def stop_search(self):
+        self._stop = True
+
+    def run(self):
+        try:
+            # Determine file types from the files list
+            file_types = set()
+            for file_path in self.files:
+                suffix = file_path.suffix.lower()
+                if suffix in SUPPORTED_TEXT:
+                    file_types.add("text")
+                elif suffix in SUPPORTED_IMAGE:
+                    file_types.add("image")
+                elif suffix in SUPPORTED_PDF:
+                    file_types.add("pdf")
+
+            # First, ensure files are indexed
+            if self.files:
+                self.search_engine.index_files(self.files)
+
+            # Perform search
+            results = self.search_engine.search(
+                query=self.query,
+                mode=SearchMode.HYBRID,
+                file_types=file_types,
+                limit=50
+            )
+
+            # Filter results to only include our target files
+            file_paths_set = {str(f) for f in self.files}
+            filtered_results = [r for r in results if r.file_path in file_paths_set]
+
+            if not self._stop:
+                self.search_completed.emit(filtered_results)
+        except Exception as e:
+            print(f"Search error: {e}")
+            if not self._stop:
+                self.search_completed.emit([])
+
+
 class MultimodalSearchApp(QMainWindow):
-    """Main application window for multimodal search."""
+    """Main application window for fast hybrid search."""
 
     def __init__(self):
         super().__init__()
-        self.ollama = OllamaClient()
+
+        # Initialize search engine with error handling
+        try:
+            self.search_engine = HybridSearchEngine()
+        except Exception as e:
+            print(f"Warning: Failed to initialize hybrid search engine: {e}")
+            # Create a minimal search engine with just text indexing
+            from indexing.text_indexer import TextIndexer
+            self.search_engine = type('MinimalSearchEngine', (), {
+                'text_indexer': TextIndexer(),
+                'semantic_indexer': None,
+                'semantic_available': False,
+                'index_files': lambda files, callback=None: {"text": 0, "semantic": 0, "errors": len(files), "skipped": 0},
+                'search': lambda query, mode=None, file_types=None, limit=50: []
+            })()
+
         self.files = []
         self.result_cards = {}
         self.search_worker = None
@@ -34,16 +120,19 @@ class MultimodalSearchApp(QMainWindow):
         self.debounce_timer.setSingleShot(True)
         self.debounce_timer.timeout.connect(self._trigger_search)
 
-        # Search mode: direct or AI-powered
-        self.direct_search_mode = True
-
         self._setup_window()
         self._setup_ui()
         self._apply_styles()
-        self._check_ollama()
+        self._setup_embedding_models()
+
+        # Check if search engine initialized properly
+        if hasattr(self.search_engine, 'semantic_available') and not self.search_engine.semantic_available:
+            self.status_bar.showMessage("⚠️ Text search only - install PyTorch for full functionality")
+        else:
+            self.status_bar.showMessage("Ready — add files and start searching")
 
     def _setup_window(self):
-        self.setWindowTitle("SearchFabric - Multimodal Search")
+        self.setWindowTitle("SearchFabric - Fast Hybrid Search")
         self.setMinimumSize(1000, 700)
         self.resize(1200, 800)
 
@@ -85,39 +174,40 @@ class MultimodalSearchApp(QMainWindow):
         layout = QHBoxLayout(header)
         layout.setContentsMargins(24, 0, 24, 0)
 
-        title = QLabel("⚡ MULTIMODAL SEARCH")
+        title = QLabel("⚡ HYBRID SEARCH")
         title.setFont(QFont("Consolas, Courier New, monospace", 14, QFont.Bold))
         title.setStyleSheet(f"color: {DARK['accent']}; letter-spacing: 2px;")
 
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Type to search across all files...")
+        self.search_input.setPlaceholderText("Type to search - text results on top, semantic below...")
         self.search_input.setFixedHeight(42)
         self.search_input.setMinimumWidth(400)
         self.search_input.setFont(QFont("Segoe UI, Arial, sans-serif", 13))
         self.search_input.textChanged.connect(self._on_search_changed)
 
-        model_label = QLabel("Model:")
+        model_label = QLabel("Embedding Model:")
         model_label.setStyleSheet(f"color: {DARK['text_dim']}; font-size: 11px;")
         self.model_combo = QComboBox()
-        self.model_combo.setFixedWidth(200)
+        self.model_combo.setFixedWidth(220)
         self.model_combo.setFixedHeight(36)
+        self.model_combo.currentTextChanged.connect(self._on_model_changed)
 
         refresh_btn = QToolButton()
         refresh_btn.setText("↻")
         refresh_btn.setFixedSize(36, 36)
         refresh_btn.setFont(QFont("Segoe UI, Arial, sans-serif", 14))
-        refresh_btn.clicked.connect(self._refresh_models)
-        refresh_btn.setToolTip("Refresh model list")
+        refresh_btn.clicked.connect(self._setup_embedding_models)
+        refresh_btn.setToolTip("Refresh embedding models")
 
-        # Search mode toggle
-        self.mode_toggle = QPushButton("⚡ Direct Search")
-        self.mode_toggle.setFixedHeight(36)
-        self.mode_toggle.setFont(QFont("Consolas, Courier New, monospace", 9))
-        self.mode_toggle.clicked.connect(self._toggle_search_mode)
-        self.mode_toggle.setStyleSheet(f"""
+        # Index files button
+        self.index_btn = QPushButton("📚 Index Files")
+        self.index_btn.setFixedHeight(36)
+        self.index_btn.setFont(QFont("Consolas, Courier New, monospace", 9))
+        self.index_btn.clicked.connect(self._index_all_files)
+        self.index_btn.setStyleSheet(f"""
             QPushButton {{
-                background: {DARK['success']};
-                border: 1px solid {DARK['success']};
+                background: {DARK['accent2']};
+                border: 1px solid {DARK['accent2']};
                 border-radius: 6px;
                 color: white;
                 padding: 0 12px;
@@ -132,7 +222,7 @@ class MultimodalSearchApp(QMainWindow):
         layout.addStretch()
         layout.addWidget(self.search_input, 1)
         layout.addStretch()
-        layout.addWidget(self.mode_toggle)
+        layout.addWidget(self.index_btn)
         layout.addWidget(model_label)
         layout.addWidget(self.model_combo)
         layout.addWidget(refresh_btn)
@@ -252,7 +342,7 @@ class MultimodalSearchApp(QMainWindow):
         self.results_layout.setSpacing(6)
 
         self.placeholder = QLabel(
-            "🔍  Start typing in the search bar\nto see direct content matches"
+            "🔍  Start typing to see hybrid search results\n📄 Direct text matches on top • 🧠 Semantic matches below"
         )
         self.placeholder.setAlignment(Qt.AlignCenter)
         self.placeholder.setFont(QFont("Segoe UI, Arial, sans-serif", 13))
@@ -269,69 +359,106 @@ class MultimodalSearchApp(QMainWindow):
         self.setStyleSheet(get_main_stylesheet())
 
     # ── Ollama ────────────────────────────────
-    def _check_ollama(self):
-        if self.ollama.is_running():
-            self._refresh_models()
-            self.status_bar.showMessage("✅  Ollama connected — ready to search")
-        else:
-            self.status_bar.showMessage("⚠️  Ollama not detected — start Ollama and click ↻")
-            self.model_combo.addItem("(Ollama offline)")
-
-    def _refresh_models(self):
-        models = self.ollama.list_models()
+    def _setup_embedding_models(self):
+        """Setup available embedding models."""
         self.model_combo.clear()
-        if models:
-            self.model_combo.addItems(models)
-            for m in models:
-                if any(x in m.lower() for x in ("llava", "vision", "bakllava")):
-                    self.model_combo.setCurrentText(m)
-                    break
-            self.status_bar.showMessage(f"✅  {len(models)} models loaded")
+
+        # Check what models are available based on installed dependencies
+        available_models = []
+
+        # Always include basic text models (sentence-transformers)
+        try:
+            from sentence_transformers import SentenceTransformer
+            available_models.extend([
+                "all-MiniLM-L6-v2 (Text - Fast)",
+                "all-mpnet-base-v2 (Text - Quality)"
+            ])
+        except ImportError:
+            pass
+
+        # Add CLIP model if available
+        try:
+            import open_clip
+            import torch
+            available_models.append("clip-ViT-B-32 (Images + Text)")
+        except ImportError:
+            pass
+
+        if not available_models:
+            available_models = ["No models available - check dependencies"]
+            self.status_bar.showMessage("⚠️ No embedding models available - install sentence-transformers")
         else:
-            self.model_combo.addItem("(no models found)")
-            self.status_bar.showMessage("⚠️  No models — run: ollama pull llava")
+            self.status_bar.showMessage("📚 Embedding models ready - click 'Index Files' to prepare search")
 
-    def _toggle_search_mode(self):
-        """Toggle between direct search and AI-powered search."""
-        self.direct_search_mode = not self.direct_search_mode
+        self.model_combo.addItems(available_models)
+        self.model_combo.setCurrentIndex(0)  # Default to first available
 
-        if self.direct_search_mode:
-            self.mode_toggle.setText("⚡ Direct Search")
-            self.mode_toggle.setStyleSheet(f"""
-                QPushButton {{
-                    background: {DARK['success']};
-                    border: 1px solid {DARK['success']};
-                    border-radius: 6px;
-                    color: white;
-                    padding: 0 12px;
-                }}
-                QPushButton:hover {{
-                    background: {DARK['accent']};
-                    border-color: {DARK['accent']};
-                }}
-            """)
-            self.placeholder.setText("🔍  Start typing in the search bar\nto see direct content matches")
-            self.status_bar.showMessage("⚡ Direct search mode - shows actual content without AI analysis")
-        else:
-            self.mode_toggle.setText("🤖 AI Search")
-            self.mode_toggle.setStyleSheet(f"""
-                QPushButton {{
-                    background: {DARK['accent2']};
-                    border: 1px solid {DARK['accent2']};
-                    border-radius: 6px;
-                    color: white;
-                    padding: 0 12px;
-                }}
-                QPushButton:hover {{
-                    background: {DARK['accent']};
-                    border-color: {DARK['accent']};
-                }}
-            """)
-            self.placeholder.setText("🔍  Start typing in the search bar\nto see AI-powered results stream in")
-            self.status_bar.showMessage("🤖 AI search mode - uses LLM to analyze and explain content")
+    def _on_model_changed(self, model_text):
+        """Handle embedding model change."""
+        if not model_text:
+            return
 
-        # Clear current results when switching modes
-        self._clear_results()
+        model_name = model_text.split(" (")[0]  # Extract model name
+
+        try:
+            # Create new semantic indexer with the selected model
+            if self.search_engine.semantic_indexer:
+                old_db_path = self.search_engine.semantic_indexer.db_path
+                self.search_engine.semantic_indexer = None  # Clean up old instance
+
+                # Create new indexer with new model
+                from indexing.semantic_indexer import SemanticIndexer
+                self.search_engine.semantic_indexer = SemanticIndexer(old_db_path, model_name)
+
+                self.status_bar.showMessage(f"📚 Switched to {model_name} - re-index files for best results")
+        except Exception as e:
+            self.status_bar.showMessage(f"⚠️ Model change failed: {e}")
+            print(f"Model change error: {e}")
+
+    def _index_all_files(self):
+        """Index all loaded files in a background thread."""
+        if not self.files:
+            self.status_bar.showMessage("⚠️ Add some files first")
+            return
+
+        self.index_btn.setEnabled(False)
+        self.index_btn.setText("📚 Indexing...")
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setRange(0, len(self.files))
+
+        self._indexing_worker = IndexingWorker(self.search_engine, list(self.files))
+        self._indexing_worker.progress_update.connect(self._on_indexing_progress)
+        self._indexing_worker.indexing_finished.connect(self._on_indexing_finished)
+        self._indexing_worker.error_occurred.connect(self._on_indexing_error)
+        self._indexing_worker.start()
+
+    def _on_indexing_progress(self, completed, total):
+        self.progress_bar.setRange(0, total)
+        self.progress_bar.setValue(completed)
+        self.status_bar.showMessage(f"📚 Indexing files... {completed}/{total}")
+
+    def _on_indexing_finished(self, stats):
+        total_indexed = stats.get('text', 0) + stats.get('semantic', 0)
+        errors = stats.get('errors', 0)
+        skipped = stats.get('skipped', 0)
+
+        msg_parts = [f"✅ Indexed {total_indexed} files"]
+        if errors > 0:
+            msg_parts.append(f"{errors} errors")
+        if skipped > 0:
+            msg_parts.append(f"{skipped} skipped")
+
+        self.status_bar.showMessage(", ".join(msg_parts))
+        self.index_btn.setEnabled(True)
+        self.index_btn.setText("📚 Index Files")
+        self.progress_bar.setVisible(False)
+
+    def _on_indexing_error(self, error_msg):
+        self.status_bar.showMessage(f"❌ Indexing failed: {error_msg}")
+        print(f"Indexing error: {error_msg}")
+        self.index_btn.setEnabled(True)
+        self.index_btn.setText("📚 Index Files")
+        self.progress_bar.setVisible(False)
 
     # ── File Management ───────────────────────
     def _add_files(self):
@@ -411,146 +538,103 @@ class MultimodalSearchApp(QMainWindow):
         self.progress_bar.setVisible(True)
         self.stop_btn.setVisible(True)
 
-        if self.direct_search_mode:
-            # Direct search mode
-            self.results_title.setText(f'⚡ DIRECT RESULTS  ·  "{query}"  ·  {len(filtered)} files')
-            self.status_bar.showMessage(f"⚡ Direct search in {len(filtered)} files...")
+        # Hybrid search mode
+        self.results_title.setText(f'🔍 HYBRID RESULTS  ·  "{query}"  ·  {len(filtered)} files')
+        self.status_bar.showMessage(f"🔍 Hybrid search in {len(filtered)} files...")
 
-            self.search_worker = DirectSearchWorker(query, filtered)
-            self.search_worker.result_found.connect(self._on_direct_result_found)
-            self.search_worker.result_started.connect(self._on_result_started)
-            self.search_worker.result_done.connect(self._on_result_done)
-            self.search_worker.error_occurred.connect(self._on_result_error)
-            self.search_worker.all_done.connect(self._on_all_done)
-        else:
-            # AI search mode
-            model = self.model_combo.currentText()
-            if "(no models" in model or "(Ollama" in model:
-                self.status_bar.showMessage("⚠️  No valid model selected")
-                return
-
-            self.results_title.setText(f'🤖 AI RESULTS  ·  "{query}"  ·  {len(filtered)} files')
-            self.status_bar.showMessage(f"🤖 AI analyzing {len(filtered)} files with {model}...")
-
-            self.search_worker = SearchWorker(query, filtered, model, self.ollama)
-            self.search_worker.result_started.connect(self._on_result_started)
-            self.search_worker.token_received.connect(self._on_token_received)
-            self.search_worker.result_done.connect(self._on_result_done)
-            self.search_worker.error_occurred.connect(self._on_result_error)
-            self.search_worker.all_done.connect(self._on_all_done)
-
+        # Create and start hybrid search worker
+        self.search_worker = HybridSearchWorker(
+            self.search_engine,
+            query,
+            filtered,  # Pass the filtered files to the worker
+            self.max_files_spin.value()
+        )
+        self.search_worker.search_completed.connect(self._on_hybrid_results)
+        self.search_worker.progress_update.connect(self._on_search_progress)
         self.search_worker.start()
+
+    def _on_hybrid_results(self, results):
+        """Handle hybrid search results."""
+        self._stop_search()
+
+        if not results:
+            self.status_bar.showMessage("No matching results found")
+            no_results_label = QLabel("No relevant matches found for your query.\nTry different keywords or add more files.")
+            no_results_label.setFont(QFont("Segoe UI, Arial, sans-serif", 11))
+            no_results_label.setStyleSheet(f"color: {DARK['text_dim']}; padding: 24px;")
+            no_results_label.setAlignment(Qt.AlignCenter)
+            self.results_layout.addWidget(no_results_label)
+            return
+
+        # Group results by type for display
+        text_results = [r for r in results if r.search_type in ('text', 'hybrid')]
+        semantic_results = [r for r in results if r.search_type == 'semantic']
+
+        # Display text results first (on top)
+        if text_results:
+            header_text = QLabel("📄 DIRECT TEXT MATCHES")
+            header_text.setFont(QFont("Consolas, Courier New, monospace", 9, QFont.Bold))
+            header_text.setStyleSheet(f"color: {DARK['accent']}; padding: 8px 0 4px 0;")
+            self.results_layout.addWidget(header_text)
+
+            for result in text_results[:10]:  # Limit text results
+                card = self._create_result_card(result)
+                self.results_layout.addWidget(card)
+
+        # Display semantic results below
+        if semantic_results:
+            header_semantic = QLabel("🧠 SEMANTIC MATCHES")
+            header_semantic.setFont(QFont("Consolas, Courier New, monospace", 9, QFont.Bold))
+            header_semantic.setStyleSheet(f"color: {DARK['accent2']}; padding: 8px 0 4px 0;")
+            self.results_layout.addWidget(header_semantic)
+
+            for result in semantic_results[:10]:  # Limit semantic results
+                card = self._create_result_card(result)
+                self.results_layout.addWidget(card)
+
+        total_results = len(text_results) + len(semantic_results)
+        self.status_bar.showMessage(f"✅ Found {total_results} results ({len(text_results)} text, {len(semantic_results)} semantic)")
+
+    def _create_result_card(self, result):
+        """Create a result card for hybrid search results."""
+        result_id = f"result_{len(self.result_cards)}_{result.file_name}"
+        card = EnhancedResultCard(
+            result_id=result_id,
+            filename=result.file_name,
+            file_type=result.file_type,
+            score=result.score,
+            file_path=result.file_path
+        )
+
+        # Set the search result content
+        card.set_fast_content(result.snippet)
+        self.result_cards[result_id] = card
+        return card
+
+    def _on_search_progress(self, current, total):
+        """Handle search progress updates."""
+        if total > 0:
+            self.progress_bar.setRange(0, total)
+            self.progress_bar.setValue(current)
 
     def _stop_search(self):
         if self.search_worker and self.search_worker.isRunning():
-            self.search_worker.stop()
+            self.search_worker.stop_search()
             self.search_worker.wait(2000)
         self.progress_bar.setVisible(False)
         self.stop_btn.setVisible(False)
 
     def _clear_results(self):
-        for card in list(self.result_cards.values()):
-            self.results_layout.removeWidget(card)
-            card.deleteLater()
+        # Remove ALL widgets from results layout (cards, headers, labels) except placeholder
+        while self.results_layout.count():
+            item = self.results_layout.takeAt(0)
+            widget = item.widget()
+            if widget and widget is not self.placeholder:
+                widget.deleteLater()
         self.result_cards.clear()
+        self.results_layout.addWidget(self.placeholder)
         self.placeholder.setVisible(True)
-
-        if self.direct_search_mode:
-            self.results_title.setText("⚡ DIRECT RESULTS")
-        else:
-            self.results_title.setText("🤖 AI RESULTS")
+        self.results_title.setText("🔍 HYBRID RESULTS")
 
     # ── Signal handlers ───────────────────────
-    def _on_direct_result_found(self, result_id, filename, file_type, content, score):
-        """Handle direct search result found."""
-        card = DirectResultCard(result_id, filename, file_type, content, score)
-        card.analyze_requested.connect(self._on_analyze_requested)
-        self.result_cards[result_id] = card
-        count = self.results_layout.count()
-        self.results_layout.insertWidget(count - 1, card)
 
-        # Auto-scroll to bottom
-        QTimer.singleShot(50, lambda: self.scroll_area.verticalScrollBar().setValue(
-            self.scroll_area.verticalScrollBar().maximum()
-        ))
-
-    def _on_analyze_requested(self, result_id, filename, file_type):
-        """Handle request for AI analysis of a specific result."""
-        model = self.model_combo.currentText()
-        if "(no models" in model or "(Ollama" in model:
-            self.status_bar.showMessage("⚠️  No valid model selected for analysis")
-            return
-
-        # Find the file for this result
-        target_file = None
-        for file_path in self.files:
-            if f"{file_path.stem}" in result_id and file_path.name == filename:
-                target_file = file_path
-                break
-
-        if not target_file:
-            self.status_bar.showMessage("⚠️  File not found for analysis")
-            return
-
-        # Create a single-file AI analysis worker
-        from search.search_worker import SearchWorker
-        query = self.search_input.text().strip()
-
-        analysis_worker = SearchWorker(query, [target_file], model, self.ollama)
-
-        # Create new result card for AI analysis
-        ai_result_id = f"ai_{result_id}"
-
-        def on_started(rid, fname, ftype):
-            if rid.replace(f"result_0_", "") == target_file.stem:
-                card = ResultCard(ai_result_id, f"🤖 {filename}", file_type)
-                self.result_cards[ai_result_id] = card
-                count = self.results_layout.count()
-                self.results_layout.insertWidget(count - 1, card)
-                self.status_bar.showMessage(f"🤖 Analyzing {filename} with AI...")
-
-        def on_token(rid, token):
-            if ai_result_id in self.result_cards:
-                self.result_cards[ai_result_id].append_token(token)
-
-        def on_done(rid):
-            if ai_result_id in self.result_cards:
-                self.result_cards[ai_result_id].mark_done()
-                self.status_bar.showMessage(f"✅ AI analysis complete for {filename}")
-
-        def on_error(rid, error):
-            if ai_result_id in self.result_cards:
-                self.result_cards[ai_result_id].mark_error(error)
-
-        analysis_worker.result_started.connect(on_started)
-        analysis_worker.token_received.connect(on_token)
-        analysis_worker.result_done.connect(on_done)
-        analysis_worker.error_occurred.connect(on_error)
-        analysis_worker.start()
-
-    def _on_result_started(self, result_id, filename, file_type):
-        if not self.direct_search_mode:
-            card = ResultCard(result_id, filename, file_type)
-            self.result_cards[result_id] = card
-            count = self.results_layout.count()
-            self.results_layout.insertWidget(count - 1, card)
-            QTimer.singleShot(50, lambda: self.scroll_area.verticalScrollBar().setValue(
-                self.scroll_area.verticalScrollBar().maximum()
-            ))
-
-    def _on_token_received(self, result_id, token):
-        if result_id in self.result_cards:
-            self.result_cards[result_id].append_token(token)
-
-    def _on_result_done(self, result_id):
-        if result_id in self.result_cards:
-            self.result_cards[result_id].mark_done()
-
-    def _on_result_error(self, result_id, error):
-        if result_id in self.result_cards:
-            self.result_cards[result_id].mark_error(error)
-
-    def _on_all_done(self):
-        self.progress_bar.setVisible(False)
-        self.stop_btn.setVisible(False)
-        self.status_bar.showMessage(f"✅  Done — {len(self.result_cards)} results")

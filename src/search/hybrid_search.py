@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from enum import Enum
 import time
 import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from indexing.text_indexer import TextIndexer
 from indexing.semantic_indexer import SemanticIndexer
@@ -49,7 +48,7 @@ class HybridSearchEngine:
 
     def index_files(self, file_paths: List[Path], progress_callback=None) -> Dict[str, int]:
         """
-        Index multiple files efficiently with parallel processing.
+        Index multiple files efficiently with batched processing.
 
         Returns:
             Dict with counts: {"text": 5, "semantic": 3, "errors": 1}
@@ -71,27 +70,39 @@ class HybridSearchEngine:
             elif suffix in SUPPORTED_IMAGE or suffix in SUPPORTED_PDF:
                 media_files.append(path)
 
-        # Index text files (fast, parallel processing)
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            text_futures = {
-                executor.submit(self._index_text_file, path): path
-                for path in text_files
-            }
+        # Batch process text files for efficiency
+        BATCH_SIZE = 100
+        batch_items = []  # (path, content, file_type) tuples for batch insert
 
-            for future in as_completed(text_futures):
-                path = text_futures[future]
-                try:
-                    if future.result():
-                        stats["text"] += 1
+        for i, path in enumerate(text_files):
+            try:
+                if not self.text_indexer.needs_reindex(path):
+                    stats["skipped"] += 1
+                else:
+                    file_type, content, _ = FileProcessor.process(path)
+                    if content and not content.startswith("[Error"):
+                        batch_items.append((path, content, file_type))
                     else:
                         stats["skipped"] += 1
-                except Exception as e:
-                    print(f"Error indexing text file {path}: {e}")
-                    stats["errors"] += 1
+            except Exception as e:
+                print(f"Error reading text file {path}: {e}")
+                stats["errors"] += 1
 
-                if progress_callback:
-                    progress_callback(len(text_futures) + len(media_files),
-                                    stats["text"] + stats["semantic"] + stats["errors"] + stats["skipped"])
+            # Flush batch when full
+            if len(batch_items) >= BATCH_SIZE:
+                self.text_indexer.index_files_batch(batch_items)
+                stats["text"] += len(batch_items)
+                batch_items = []
+
+            if progress_callback:
+                progress_callback(len(text_files) + len(media_files),
+                                i + 1)
+
+        # Flush remaining batch
+        if batch_items:
+            self.text_indexer.index_files_batch(batch_items)
+            stats["text"] += len(batch_items)
+            batch_items = []
 
         # Index media files (requires content extraction, slower)
         for i, path in enumerate(media_files):
@@ -106,7 +117,7 @@ class HybridSearchEngine:
 
             if progress_callback:
                 progress_callback(len(text_files) + len(media_files),
-                                stats["text"] + stats["semantic"] + stats["errors"] + stats["skipped"])
+                                len(text_files) + i + 1)
 
         return stats
 
@@ -182,7 +193,7 @@ class HybridSearchEngine:
 
             if semantic_file_types:
                 semantic_results = self.semantic_indexer.search_semantic(
-                    query, semantic_file_types, threshold=0.3, limit=limit
+                    query, semantic_file_types, threshold=0.25, limit=limit
                 )
                 for file_path, file_name, description, similarity in semantic_results:
                     # Determine file type from description or path

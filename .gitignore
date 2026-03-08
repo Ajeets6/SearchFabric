@@ -209,3 +209,7 @@ __marimo__/
 /chroma_db/
 
 .github
+/test
+*.pkl
+*.db
+test.py

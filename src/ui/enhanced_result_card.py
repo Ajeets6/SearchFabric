@@ -1,6 +1,7 @@
 from PySide6.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QPixmap
+from pathlib import Path
 
 from ui.styles import DARK
 
@@ -9,11 +10,12 @@ class EnhancedResultCard(QFrame):
 
     llm_analysis_requested = Signal(str)  # Request LLM analysis for this result
 
-    def __init__(self, result_id, filename, file_type, score=0.0, parent=None):
+    def __init__(self, result_id, filename, file_type, score=0.0, file_path=None, parent=None):
         super().__init__(parent)
         self.result_id = result_id
         self.filename = filename
         self.file_type = file_type
+        self.file_path = file_path
         self.score = score
         self._fast_content = ""
         self._llm_content = ""
@@ -93,6 +95,15 @@ class EnhancedResultCard(QFrame):
         sep.setStyleSheet(f"color: {DARK['border']};")
         layout.addWidget(sep)
 
+        # Image thumbnail for image files
+        self.thumbnail_label = QLabel()
+        self.thumbnail_label.setAlignment(Qt.AlignCenter)
+        self.thumbnail_label.hide()
+        layout.addWidget(self.thumbnail_label)
+
+        if self.file_type == 'image' and self.file_path:
+            self._load_thumbnail()
+
         # Fast content area
         self.fast_content_label = QLabel("")
         self.fast_content_label.setWordWrap(True)
@@ -131,6 +142,19 @@ class EnhancedResultCard(QFrame):
         """)
         self.analyze_btn.hide()
         layout.addWidget(self.analyze_btn)
+
+    def _load_thumbnail(self):
+        """Load and display image thumbnail."""
+        try:
+            path = Path(self.file_path)
+            if path.exists() and path.suffix.lower() in {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'}:
+                pixmap = QPixmap(str(path))
+                if not pixmap.isNull():
+                    scaled = pixmap.scaled(200, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                    self.thumbnail_label.setPixmap(scaled)
+                    self.thumbnail_label.show()
+        except Exception as e:
+            print(f"Thumbnail error: {e}")
 
     def set_fast_content(self, content: str):
         """Set the fast search result content."""

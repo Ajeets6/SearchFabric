@@ -7,6 +7,7 @@ import sqlite3
 from pathlib import Path
 from typing import List, Tuple, Dict
 import threading
+import time
 from contextlib import contextmanager
 
 class TextIndexer:
@@ -61,8 +62,32 @@ class TextIndexer:
             conn.execute("""
                 INSERT INTO file_metadata (file_path, file_size, last_modified, file_type, indexed_at)
                 VALUES (?, ?, ?, ?, ?)
-            """, (str(file_path), stat.st_size, stat.st_mtime, file_type, threading.time.time()))
+            """, (str(file_path), stat.st_size, stat.st_mtime, file_type, time.time()))
 
+            conn.commit()
+
+    def index_files_batch(self, files: list):
+        """Index multiple text files in a single transaction.
+
+        Args:
+            files: List of (file_path, content, file_type) tuples
+        """
+        with self._get_connection() as conn:
+            for file_path, content, file_type in files:
+                try:
+                    stat = file_path.stat()
+                    conn.execute("DELETE FROM text_content WHERE file_path = ?", (str(file_path),))
+                    conn.execute("DELETE FROM file_metadata WHERE file_path = ?", (str(file_path),))
+                    conn.execute("""
+                        INSERT INTO text_content (file_path, file_name, content, last_modified)
+                        VALUES (?, ?, ?, ?)
+                    """, (str(file_path), file_path.name, content, stat.st_mtime))
+                    conn.execute("""
+                        INSERT INTO file_metadata (file_path, file_size, last_modified, file_type, indexed_at)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (str(file_path), stat.st_size, stat.st_mtime, file_type, time.time()))
+                except Exception as e:
+                    print(f"Batch index error for {file_path}: {e}")
             conn.commit()
 
     def search_text(self, query: str, limit: int = 50) -> List[Tuple[str, str, float]]:
