@@ -5,9 +5,15 @@ Supports: text files, images, PDFs | Live search-as-you-type | Streaming results
 """
 
 import sys
+from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QColor, QPalette
+
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None
 
 from ui.styles import DARK
 from ui.main_window import MultimodalSearchApp
@@ -15,6 +21,11 @@ from ui.main_window import MultimodalSearchApp
 
 def main():
     """Application entry point."""
+    # Load optional .env values (e.g., RAM_PLUS_CHECKPOINT) from project root.
+    if load_dotenv is not None:
+        project_root = Path(__file__).resolve().parents[1]
+        load_dotenv(project_root / ".env")
+
     app = QApplication(sys.argv)
     app.setApplicationName("Multimodal Search")
     app.setStyle("Fusion")

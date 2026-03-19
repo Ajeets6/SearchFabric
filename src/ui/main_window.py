@@ -127,9 +127,9 @@ class MultimodalSearchApp(QMainWindow):
 
         # Check if search engine initialized properly
         if hasattr(self.search_engine, 'semantic_available') and not self.search_engine.semantic_available:
-            self.status_bar.showMessage("⚠️ Text search only - install PyTorch for full functionality")
+            self.status_bar.showMessage("⚠️ Text search only - install sentence-transformers for semantic indexing")
         else:
-            self.status_bar.showMessage("Ready — add files and start searching")
+            self.status_bar.showMessage("Ready - RAM++ image tagging activates when checkpoint is configured")
 
     def _setup_window(self):
         self.setWindowTitle("SearchFabric - Fast Hybrid Search")
@@ -185,7 +185,7 @@ class MultimodalSearchApp(QMainWindow):
         self.search_input.setFont(QFont("Segoe UI, Arial, sans-serif", 13))
         self.search_input.textChanged.connect(self._on_search_changed)
 
-        model_label = QLabel("Embedding Model:")
+        model_label = QLabel("Semantic Encoder:")
         model_label.setStyleSheet(f"color: {DARK['text_dim']}; font-size: 11px;")
         self.model_combo = QComboBox()
         self.model_combo.setFixedWidth(220)
@@ -360,27 +360,18 @@ class MultimodalSearchApp(QMainWindow):
 
     # ── Ollama ────────────────────────────────
     def _setup_embedding_models(self):
-        """Setup available embedding models."""
+        """Setup available semantic models."""
         self.model_combo.clear()
 
-        # Check what models are available based on installed dependencies
         available_models = []
 
-        # Always include basic text models (sentence-transformers)
         try:
             from sentence_transformers import SentenceTransformer
             available_models.extend([
-                "all-MiniLM-L6-v2 (Text - Fast)",
-                "all-mpnet-base-v2 (Text - Quality)"
+                "all-MiniLM-L6-v2 (RAM++ Hybrid - Fast)",
+                "all-mpnet-base-v2 (RAM++ Hybrid - Quality)",
+                "paraphrase-multilingual-MiniLM-L12-v2 (RAM++ Hybrid - Multilingual)",
             ])
-        except ImportError:
-            pass
-
-        # Add CLIP model if available
-        try:
-            import open_clip
-            import torch
-            available_models.append("clip-ViT-B-32 (Images + Text)")
         except ImportError:
             pass
 
@@ -388,13 +379,20 @@ class MultimodalSearchApp(QMainWindow):
             available_models = ["No models available - check dependencies"]
             self.status_bar.showMessage("⚠️ No embedding models available - install sentence-transformers")
         else:
-            self.status_bar.showMessage("📚 Embedding models ready - click 'Index Files' to prepare search")
+            ram_status = None
+            if getattr(self.search_engine, "semantic_indexer", None):
+                ram_status = self.search_engine.semantic_indexer.get_backend_status()
+
+            if ram_status and ram_status.get("ram_checkpoint"):
+                self.status_bar.showMessage("📚 Semantic models ready - RAM++ checkpoint configured")
+            else:
+                self.status_bar.showMessage("📚 Semantic models ready - set RAM_PLUS_CHECKPOINT for RAM++ tags")
 
         self.model_combo.addItems(available_models)
         self.model_combo.setCurrentIndex(0)  # Default to first available
 
     def _on_model_changed(self, model_text):
-        """Handle embedding model change."""
+        """Handle semantic model change."""
         if not model_text:
             return
 

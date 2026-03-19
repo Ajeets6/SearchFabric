@@ -1,9 +1,7 @@
-"""
-Hybrid Search Engine combining text search and semantic search
-"""
+"""Hybrid search engine combining text FTS and RAM++-enriched semantic search."""
 
 from pathlib import Path
-from typing import List, Tuple, Dict, Optional, Set
+from typing import List, Dict, Optional, Set
 from dataclasses import dataclass
 from enum import Enum
 import time
@@ -29,7 +27,7 @@ class SearchResult:
     search_type: str  # "text", "semantic", "hybrid"
 
 class HybridSearchEngine:
-    """Fast hybrid search combining text indexing and semantic embeddings."""
+    """Fast hybrid search combining text indexing and RAM++ tag-aware semantics."""
 
     def __init__(self, text_db_path: str = "text_index.db",
                  semantic_db_path: str = "semantic_index.db"):
@@ -57,7 +55,7 @@ class HybridSearchEngine:
 
         # Separate files by type for different indexing strategies
         text_files = []
-        media_files = []  # Images and PDFs that need semantic indexing
+        media_files = []
 
         for path in file_paths:
             if not path.exists():
@@ -104,7 +102,7 @@ class HybridSearchEngine:
             stats["text"] += len(batch_items)
             batch_items = []
 
-        # Index media files (requires content extraction, slower)
+        # Index media files with semantic indexer.
         for i, path in enumerate(media_files):
             try:
                 if self._index_media_file(path):
@@ -139,10 +137,8 @@ class HybridSearchEngine:
 
         file_type, content, images = FileProcessor.process(path)
 
-        # For images, we'll need to generate descriptions using Ollama later
-        # For now, use filename and basic metadata as description
         if file_type == "image":
-            description = f"Image file: {path.name}. {content if content else ''}"
+            description = f"image file {path.name}"
         elif file_type == "pdf":
             description = content if content and not content.startswith("[Error") else f"PDF file: {path.name}"
         else:
@@ -192,11 +188,8 @@ class HybridSearchEngine:
                 semantic_file_types.append("pdf")
 
             if semantic_file_types:
-                semantic_results = self.semantic_indexer.search_semantic(
-                    query, semantic_file_types, threshold=0.25, limit=limit
-                )
+                semantic_results = self.semantic_indexer.search_semantic(query, semantic_file_types, threshold=0.25, limit=limit)
                 for file_path, file_name, description, similarity in semantic_results:
-                    # Determine file type from description or path
                     file_type = "image" if Path(file_path).suffix.lower() in SUPPORTED_IMAGE else "pdf"
 
                     results.append(SearchResult(
@@ -204,7 +197,7 @@ class HybridSearchEngine:
                         file_name=file_name,
                         file_type=file_type,
                         score=similarity,
-                        snippet=description[:200] + "..." if len(description) > 200 else description,
+                        snippet=description[:260] + "..." if len(description) > 260 else description,
                         search_type="semantic"
                     ))
 
@@ -238,10 +231,6 @@ class HybridSearchEngine:
 
     def should_use_semantic(self, query: str) -> bool:
         """Heuristic to determine if semantic search would be beneficial."""
-        # Use semantic search for:
-        # - Visual/conceptual terms
-        # - Abstract concepts
-        # - Non-literal searches
         conceptual_words = {
             "apple", "apples", "two", "three", "four", "five", "red", "blue", "green",
             "happy", "sad", "beautiful", "dark", "light", "concept", "idea", "similar",
